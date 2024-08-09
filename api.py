@@ -3,6 +3,7 @@ import random
 from flask import Flask, jsonify, abort, make_response, request
 from flask_cors import CORS
 from pymongo import MongoClient
+import bcrypt
 
 ##encriptar y protocolo https
 
@@ -65,16 +66,16 @@ def create_shop():
         if 'logoTienda' not in request.files or 'datoFirmaDigital' not in request.files:
             abort(400)
 
-        logo = request.files['logoTienda']
+        logo = request.files['logoTienda']    ##pasar a utf o algo para encriptar.
         pem = request.files['datoFirmaDigital']
 
-        # Imprimir los datos recibidos
-        print('Request.form:', request.form)
-        print('Request.files:', request.files)
-        
+
         # Contenido de los archivos
         logoConte = logo.read().decode('utf-8')
         pemConte = pem.read().decode('utf-8')
+        passs = request.form['passwd'].encode('utf-8')  #lo guarda y pasa a bytes o algo asi INVESTIGAR BIEN
+        salt = bcrypt.gensalt()
+        hasheada = bcrypt.hashpw(passs, salt) 
 
         
         tkn1 = token()
@@ -88,27 +89,15 @@ def create_shop():
             'categoria': request.form['categoria'],
             'datoFirmaDigital': pemConte,  ##cifrar
             'email': request.form['email'],
-            'passwd': request.form['passwd'], ##cifrar
+            'passwd': passs,    ##cifrada (probar)
             'logoTienda': logoConte
         }
 
         # Intentar insertar el documento en la base de datos
         conex.tienda.insert_one(tienda)
-        tienda2 = {
-            'token': tkn1,
-            'nombreEmpresa': request.form['nombreEmpresa'],
-            'propietarioEmpresa': request.form['propietarioEmpresa'],
-            'cedulaEmpresa': request.form['cedulaEmpresa'],
-            'categoria': request.form['categoria'],
-            'datoFirmaDigital': pemConte,
-            'email': request.form['email'],
-            'passwd': request.form['passwd'],
-            'logoTienda': logoConte
-        }
         data = {
             "status_code": 201,
-            "status_message": "Data was created",
-            "data": {'tienda': tienda2}
+            "status_message": "Data was created"
         }
     except Exception as expc:
         # Imprimir la excepción completa
@@ -124,22 +113,30 @@ def create_shop():
 def get_enterprise_login(email, passwd):
     conex = contextDB()
     try:
-        tienda = conex.tienda.find_one({"email": email, "passwd": passwd})
+        tienda = conex.tienda.find_one({"email": email})
         if tienda is None:
             return jsonify({
                 "status_code": 404,
                 "status_message": "Not Found",
                 "data": "Enterprise not found"
             }), 404
+
+        passstored=tienda['passwd']
+        if not bcrypt.checkpw(passs.encode('utf-8'), passstored.encode('utf-8')):
+            return jsonify({
+                "status_code": 401,
+                "status_message": "Unauthorized",
+                "data": "Invalid pass"
+            }), 401
+
+
         data = {
-                    "status_code": 200,
-                    "status_message": "Ok",
-                    "token": str(tienda['_id']),
-                    "data": {
-                        "enterprise": {
-                            "email": tienda['email'],
-                            "passwd": tienda['passwd'],
-                            "token": str(tienda['_id'])
+                "status_code": 200,
+                "status_message": "Ok",
+                "token": str(tienda['_id']),
+                "data": {
+                    "enterprise": {
+                        "token": str(tienda['_id']) #CREAR EL TOKEN PARA EL INICIO DE SESIÓN
                         }
                     }
                 }
@@ -162,30 +159,25 @@ def registrarUsuario():
             not 'lugarResidencia' in request.json:
         abort(400)
 
+    passs= request.json['passwd'].encode('utf-8')
+    salt = bcrypt.gensalt()
+    hasheada= bcrypt.hashpw(passs, salt)
+
     tkn1 = token()
     usuario = {
         "_id": tkn1,
         'nombre': request.json['nombre'],
         'apellidos': request.json['apellidos'],
         'email': request.json['email'],
-        'passwd': request.json['passwd'],
+        'passwd': hasheada, 
         'lugarResidencia': request.json['lugarResidencia']
     }
     try:
         conex = contextDB()
         conex.user.insert_one(usuario)
-        usuario2 = {
-            'token': tkn1,
-            'nombre': request.json['nombre'],
-            'apellidos': request.json['apellidos'],
-            'email': request.json['email'],
-            'passwd': request.json['passwd'],
-            'lugarResidencia': request.json['lugarResidencia']
-            }
         data = {
             "status_code": 201,
-            "status_message": "Data was created",
-            "data": {'usuario': usuario2}
+            "status_message": "Data was created"
         }
     except Exception as expc:
         print(expc)
@@ -198,21 +190,28 @@ def registrarUsuario():
 def get_user_login(email, passwd):
     conex = contextDB()
     try:
-        usuario = conex.user.find_one({"email": email, "passwd": passwd})
+        usuario = conex.user.find_one({"email": email})
         if usuario is None:
             return jsonify({
                 "status_code": 404,
                 "status_message": "Not Found",
                 "data": "User not found"
             }), 404
+        
+            passstored=usuario['passwd']
+            if not bcrypt.checkpw(passs.encode('utf-8'), passstored.encode('utf-8')):
+            return jsonify({
+                "status_code": 401,
+                "status_message": "Unauthorized",
+                "data": "Invalid pass"
+            }), 401
+
         data = {
             "status_code": 200,
             "status_message": "Ok",
             "token": str(usuario['_id']),
             "data": {
                 "user": {
-                    "email": usuario['email'],
-                    "passwd": usuario['passwd'],
                     "token": str(usuario['_id'])
                 }
             }
@@ -223,6 +222,76 @@ def get_user_login(email, passwd):
     return jsonify(data), 200
 
 ##Productos
+
+## Pruebita
+
+@app.route('/publicarProducto', methods=['POST'])
+def publicar_producto():
+    if not request.json or \
+            not 'tiendaId' in request.json or \
+            not 'nombreProducto' in request.json or \
+            not 'descripcion' in request.json or \
+            not 'precio' in request.json or \
+            not 'stock' in request.json:
+        abort(400)
+
+    try:
+        conex = contextDB()
+        tienda = conex.tienda.find_one({"_id": request.json['tiendaId']})
+        if tienda is None:
+            return jsonify({
+                "status_code": 404,
+                "status_message": "Tienda no encontrada"
+            }), 404
+
+        tkn1 = token()
+        producto = {
+            "_id": tkn1,
+            'tiendaId': request.json['tiendaId'],
+            'nombreProducto': request.json['nombreProducto'],
+            'descripcion': request.json['descripcion'],
+            'precio': request.json['precio'],
+            'stock': request.json['stock']
+        }
+
+        conex.producto.insert_one(producto)
+        data = {
+            "status_code": 201,
+            "status_message": "Producto publicado",
+            "data": {'producto': producto}
+        }
+    except Exception as expc:
+        print(expc)
+        abort(500)
+    return jsonify(data), 201
+
+@app.route('/producto/<string:producto_id>', methods=['GET'])
+def get_producto(producto_id):
+    conex = contextDB()
+    try:
+        producto = conex.producto.find_one({"_id": producto_id})
+        if producto is None:
+            return jsonify({
+                "status_code": 404,
+                "status_message": "Producto no encontrado"
+            }), 404
+        data = {
+            "status_code": 200,
+            "status_message": "Ok",
+            "data": {
+                "producto": {
+                    "nombreProducto": producto['nombreProducto'],
+                    "descripcion": producto['descripcion'],
+                    "precio": producto['precio'],
+                    "stock": producto['stock']
+                }
+            }
+        }
+    except Exception as expc:
+        print(expc)
+        abort(500)
+    return jsonify(data), 200
+
 
 
 if __name__ == '__main__':

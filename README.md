@@ -12,6 +12,6 @@ python -m venv venv
 ```bash
 python -m pip install --upgrade pip
 
-pip install flask pymongo
+pip install flask pymongo bcrypt
 
 
