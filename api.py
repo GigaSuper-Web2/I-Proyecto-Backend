@@ -198,12 +198,15 @@ def get_user_login(email, passwd):
                 "data": "User not found"
             }), 404
         
-            passstored=usuario['passwd']
-            if not bcrypt.checkpw(passs.encode('utf-8'), passstored.encode('utf-8')):
+        passstored = usuario.get('passwd')
+        if isinstance(passstored, str):  # Verifica si la contraseña almacenada es un string
+            passstored = passstored.encode('utf-8')  # Si es un string, conviértelo a bytes
+
+        if not bcrypt.checkpw(passwd.encode('utf-8'), passstored):
             return jsonify({
                 "status_code": 401,
                 "status_message": "Unauthorized",
-                "data": "Invalid pass"
+                "data": "Invalid password"
             }), 401
 
         data = {
@@ -216,10 +219,15 @@ def get_user_login(email, passwd):
                 }
             }
         }
+        return jsonify(data), 200
+
     except Exception as expc:
-        print(expc)
-        abort(500)
-    return jsonify(data), 200
+        print(f"Error during login: {expc}")  # Mejora el mensaje de error para depuración
+        return jsonify({
+            "status_code": 500,
+            "status_message": "Internal Server Error",
+            "data": str(expc)  # Esto enviará el mensaje de error en la respuesta (útil para depuración)
+        }), 500
 
 ##Productos
 
