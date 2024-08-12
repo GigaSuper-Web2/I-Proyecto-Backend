@@ -1,9 +1,11 @@
 from datetime import datetime
 import random
 from flask import Flask, jsonify, abort, make_response, request
+from werkzeug.utils import secure_filename # pa los documentos svg
 from flask_cors import CORS
 from pymongo import MongoClient
 import bcrypt
+import os
 
 ##encriptar y protocolo https
 
@@ -44,6 +46,10 @@ def not_found(error):
 def internal_error(error):
     return make_response(jsonify({'error': 'Internal Server Error....!'}), 500)
 
+
+
+
+## Registrar tienda
 @app.route('/registrarTienda', methods=['POST'])
 def create_shop():
     try:
@@ -102,7 +108,7 @@ def create_shop():
     
     return jsonify(data), 201
 
-
+## Login Empresa
 @app.route('/loginEmpresa/<string:email>/<string:passwd>', methods=['GET'])
 def get_enterprise_login(email, passwd):
     conex = contextDB()
@@ -149,9 +155,6 @@ def get_enterprise_login(email, passwd):
 
 
 
-
-
-
 ###                 Usuarios
 
 @app.route('/registrarUsuario', methods=['POST'])
@@ -190,7 +193,7 @@ def registrarUsuario():
     return jsonify(data), 201
 
 
-
+## Logueo de usuario con contraseña encriptada
 @app.route('/loginUsuario/<string:email>/<string:passwd>', methods=['GET'])
 def get_user_login(email, passwd):
     conex = contextDB()
@@ -234,52 +237,111 @@ def get_user_login(email, passwd):
             "data": str(expc)  # Esto enviará el mensaje de error en la respuesta (útil para depuración)
         }), 500
 
-##Productos
+                                                        ##Productos
 
-## Pruebita
-
-@app.route('/publicarProducto', methods=['POST'])
-def publicar_producto():
-    if not request.json or \
-            not 'tiendaId' in request.json or \
-            not 'nombreProducto' in request.json or \
-            not 'descripcion' in request.json or \
-            not 'precio' in request.json or \
-            not 'stock' in request.json:
-        abort(400)
-
+## Agregar un producto a una tienda
+@app.route('/agregarProducto', methods=['POST'])
+def agregar_producto():
     try:
-        conex = contextDB()
-        tienda = conex.tienda.find_one({"_id": request.json['tiendaId']})
-        if tienda is None:
-            return jsonify({
-                "status_code": 404,
-                "status_message": "Tienda no encontrada"
-            }), 404
+        # Verificar los datos del formulario
+        if not request.form or \
+                not all(key in request.form for key in (
+                    'tiendaId', 
+                    'nombreProducto', 
+                    'descripcion', 
+                    'precio', 
+                    'stock'
+                )):
+            abort(400)
 
+        if 'logoProducto' not in request.files:
+            abort(400)
+
+        # Obtener el archivo
+        logo = request.files['logoProducto']
+        
+        # Leer el contenido del archivo SVG
+        logoConte = logo.read().decode('utf-8')
+
+        # Crear un ID único para el producto
         tkn1 = token()
+        conex = contextDB()
+
+        # Crear el documento del producto
         producto = {
             "_id": tkn1,
-            'tiendaId': request.json['tiendaId'],
-            'nombreProducto': request.json['nombreProducto'],
-            'descripcion': request.json['descripcion'],
-            'precio': request.json['precio'],
-            'stock': request.json['stock']
+            'tiendaId': request.form['tiendaId'],
+            'nombreProducto': request.form['nombreProducto'],
+            'descripcion': request.form['descripcion'],
+            'precio': request.form['precio'],
+            'stock': request.form['stock'],
+            'logoProducto': logoConte
         }
 
+        # Intentar insertar el documento en la base de datos
         conex.producto.insert_one(producto)
         data = {
             "status_code": 201,
-            "status_message": "Producto publicado",
-            "data": {'producto': producto}
+            "status_message": "Producto agregado"
         }
     except Exception as expc:
-        print(expc)
+        # Imprimir la excepción completa
+        print('Exception:', str(expc))
         abort(500)
+    
     return jsonify(data), 201
 
-## Obtener producto en especifico
+@app.route('/editarProducto/<string:producto_id>', methods=['PUT'])
+def editar_producto(producto_id):
+    try:
+        # Verificar los datos del formulario
+        if not request.form and 'logoProducto' not in request.files:
+            abort(400)
 
+        conex = contextDB()
+        producto = conex.producto.find_one({"_id": producto_id})
+        if producto is None:
+            return jsonify({
+                "status_code": 404,
+                "status_message": "Producto no encontrado"
+            }), 404
+
+        # Datos a actualizar
+        update_data = {}
+        if 'nombreProducto' in request.form:
+            update_data['nombreProducto'] = request.form['nombreProducto']
+        if 'descripcion' in request.form:
+            update_data['descripcion'] = request.form['descripcion']
+        if 'precio' in request.form:
+            update_data['precio'] = request.form['precio']
+        if 'stock' in request.form:
+            update_data['stock'] = request.form['stock']
+
+        # Si se proporciona un nuevo archivo, actualizarlo
+        if 'logoProducto' in request.files:
+            logo = request.files['logoProducto']
+            logoConte = logo.read().decode('utf-8')
+            update_data['logoProducto'] = logoConte
+
+        if update_data:
+            conex.producto.update_one({'_id': producto_id}, {'$set': update_data})
+            return jsonify({
+                "status_code": 200,
+                "status_message": "Producto actualizado"#,
+                #"data": {'producto': update_data}
+            }), 200
+        else:
+            return jsonify({
+                "status_code": 400,
+                "status_message": "No se proporcionaron datos para actualizar"
+            }), 400
+
+    except Exception as expc:
+        # Imprimir la excepción completa
+        print('Exception:', str(expc))
+        abort(500)
+
+## GET producto especifico
 @app.route('/productoEspecifico/<string:producto_id>', methods=['GET'])
 def get_producto(producto_id):
     conex = contextDB()
@@ -290,6 +352,7 @@ def get_producto(producto_id):
                 "status_code": 404,
                 "status_message": "Producto no encontrado"
             }), 404
+
         data = {
             "status_code": 200,
             "status_message": "Ok",
@@ -298,14 +361,36 @@ def get_producto(producto_id):
                     "nombreProducto": producto['nombreProducto'],
                     "descripcion": producto['descripcion'],
                     "precio": producto['precio'],
-                    "stock": producto['stock']
+                    "stock": producto['stock']#,
+                    #"logoProducto": producto['logoProducto']
                 }
             }
         }
     except Exception as expc:
-        print(expc)
+        print('Exception:', str(expc))
         abort(500)
+    
     return jsonify(data), 200
+
+## Eliminar producto especifico
+@app.route('/eliminarProducto/<string:producto_id>', methods=['DELETE'])
+def eliminar_producto(producto_id):
+    conex = contextDB()
+    try:
+        resultado = conex.producto.delete_one({"_id": producto_id})
+        if resultado.deleted_count == 0:
+            return jsonify({
+                "status_code": 404,
+                "status_message": "Producto no encontrado"
+            }), 404
+        
+        return jsonify({
+            "status_code": 200,
+            "status_message": "Producto eliminado"
+        }), 200
+    except Exception as expc:
+        print('Exception:', str(expc))
+        abort(500)
 
 
 
