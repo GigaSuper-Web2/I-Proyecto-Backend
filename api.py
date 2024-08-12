@@ -44,10 +44,6 @@ def not_found(error):
 def internal_error(error):
     return make_response(jsonify({'error': 'Internal Server Error....!'}), 500)
 
-
-#####           Tiendas
-
-###crear
 @app.route('/registrarTienda', methods=['POST'])
 def create_shop():
     try:
@@ -66,18 +62,18 @@ def create_shop():
         if 'logoTienda' not in request.files or 'datoFirmaDigital' not in request.files:
             abort(400)
 
-        logo = request.files['logoTienda']    ##pasar a utf o algo para encriptar.
+        logo = request.files['logoTienda']
         pem = request.files['datoFirmaDigital']
-
 
         # Contenido de los archivos
         logoConte = logo.read().decode('utf-8')
         pemConte = pem.read().decode('utf-8')
-        passs = request.form['passwd'].encode('utf-8')  #lo guarda y pasa a bytes o algo asi INVESTIGAR BIEN
-        salt = bcrypt.gensalt()
-        hasheada = bcrypt.hashpw(passs, salt) 
 
-        
+        # Encriptar la contraseña
+        passs = request.form['passwd'].encode('utf-8')
+        salt = bcrypt.gensalt()
+        hasheada = bcrypt.hashpw(passs, salt)
+
         tkn1 = token()
         conex = contextDB()
 
@@ -87,9 +83,9 @@ def create_shop():
             'propietarioEmpresa': request.form['propietarioEmpresa'],
             'cedulaEmpresa': request.form['cedulaEmpresa'],
             'categoria': request.form['categoria'],
-            'datoFirmaDigital': pemConte,  ##cifrar
+            'datoFirmaDigital': pemConte,  # Se puede cifrar si es necesario
             'email': request.form['email'],
-            'passwd': passs,    ##cifrada (probar)
+            'passwd': hasheada,  # Contraseña encriptada
             'logoTienda': logoConte
         }
 
@@ -107,12 +103,11 @@ def create_shop():
     return jsonify(data), 201
 
 
-
-#Logg in
 @app.route('/loginEmpresa/<string:email>/<string:passwd>', methods=['GET'])
 def get_enterprise_login(email, passwd):
     conex = contextDB()
     try:
+        # Buscar la tienda por email
         tienda = conex.tienda.find_one({"email": email})
         if tienda is None:
             return jsonify({
@@ -121,28 +116,38 @@ def get_enterprise_login(email, passwd):
                 "data": "Enterprise not found"
             }), 404
 
-        passstored=tienda['passwd']
-        if not bcrypt.checkpw(passs.encode('utf-8'), passstored.encode('utf-8')):
+        # Obtener la contraseña almacenada
+        passstored = tienda.get('passwd')
+
+        # Comparar la contraseña ingresada con la almacenada
+        if not bcrypt.checkpw(passwd.encode('utf-8'), passstored):
             return jsonify({
                 "status_code": 401,
                 "status_message": "Unauthorized",
-                "data": "Invalid pass"
+                "data": "Invalid password"
             }), 401
 
-
         data = {
-                "status_code": 200,
-                "status_message": "Ok",
-                "token": str(tienda['_id']),
-                "data": {
-                    "enterprise": {
-                        "token": str(tienda['_id']) #CREAR EL TOKEN PARA EL INICIO DE SESIÓN
-                        }
-                    }
+            "status_code": 200,
+            "status_message": "Ok",
+            "token": str(tienda['_id']),
+            "data": {
+                "enterprise": {
+                    "token": str(tienda['_id'])
                 }
+            }
+        }
+        return jsonify(data), 200
+
     except Exception as expc:
-        abort(500)
-    return jsonify(data), 200
+        print(f"Error during login: {expc}")  # Mejora el mensaje de error para depuración
+        return jsonify({
+            "status_code": 500,
+            "status_message": "Internal Server Error",
+            "data": str(expc)  # Esto enviará el mensaje de error en la respuesta (útil para depuración)
+        }), 500
+
+
 
 
 
@@ -273,7 +278,9 @@ def publicar_producto():
         abort(500)
     return jsonify(data), 201
 
-@app.route('/producto/<string:producto_id>', methods=['GET'])
+## Obtener producto en especifico
+
+@app.route('/productoEspecifico/<string:producto_id>', methods=['GET'])
 def get_producto(producto_id):
     conex = contextDB()
     try:
