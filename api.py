@@ -83,30 +83,36 @@ def create_shop():
         tkn1 = token()
         conex = contextDB()
 
+        # Verificar si ya existe una empresa
+        if conex.tienda.count_documents({}) > 0:
+            return jsonify({
+                "status_code": 400,
+                "status_message": "Ya existe una empresa registrada"
+            }), 400
+
         tienda = {
             "_id": tkn1,
             'nombreEmpresa': request.form['nombreEmpresa'],
             'propietarioEmpresa': request.form['propietarioEmpresa'],
             'cedulaEmpresa': request.form['cedulaEmpresa'],
             'categoria': request.form['categoria'],
-            'datoFirmaDigital': pemConte,  # Se puede cifrar si es necesario
+            'datoFirmaDigital': pemConte,
             'email': request.form['email'],
-            'passwd': hasheada,  # Contraseña encriptada
+            'passwd': hasheada,
             'logoTienda': logoConte
         }
 
-        # Intentar insertar el documento en la base de datos
         conex.tienda.insert_one(tienda)
         data = {
             "status_code": 201,
             "status_message": "Data was created"
         }
     except Exception as expc:
-        # Imprimir la excepción completa
         print('Exception:', str(expc))
         abort(500)
     
     return jsonify(data), 201
+
 
 ## Login Empresa
 @app.route('/loginEmpresa/<string:email>/<string:passwd>', methods=['GET'])
@@ -152,6 +158,33 @@ def get_enterprise_login(email, passwd):
             "status_message": "Internal Server Error",
             "data": str(expc)  # Esto enviará el mensaje de error en la respuesta (útil para depuración)
         }), 500
+
+## Eliminar una tienda con todos sus productos
+@app.route('/eliminarEmpresa', methods=['DELETE'])
+def eliminar_empresa():
+    conex = contextDB()
+    try:
+        # Buscar la empresa
+        tienda = conex.tienda.find_one()
+        if tienda is None:
+            return jsonify({
+                "status_code": 404,
+                "status_message": "Empresa no encontrada"
+            }), 404
+
+        # Eliminar los productos asociados a la empresa
+        conex.producto.delete_many({"tiendaId": tienda['_id']})
+
+        # Eliminar la empresa
+        conex.tienda.delete_one({"_id": tienda['_id']})
+
+        return jsonify({
+            "status_code": 200,
+            "status_message": "Empresa y productos eliminados"
+        }), 200
+    except Exception as expc:
+        print('Exception:', str(expc))
+        abort(500)
 
 
 
@@ -257,6 +290,18 @@ def agregar_producto():
         if 'logoProducto' not in request.files:
             abort(400)
 
+        # Obtener el ID de la tienda
+        tienda_id = request.form['tiendaId']
+        conex = contextDB()
+
+        # Verificar si la tienda existe
+        tienda = conex.tienda.find_one({"_id": tienda_id})
+        if tienda is None:
+            return jsonify({
+                "status_code": 404,
+                "status_message": "Tienda no encontrada"
+            }), 404
+
         # Obtener el archivo
         logo = request.files['logoProducto']
         
@@ -265,12 +310,11 @@ def agregar_producto():
 
         # Crear un ID único para el producto
         tkn1 = token()
-        conex = contextDB()
 
         # Crear el documento del producto
         producto = {
             "_id": tkn1,
-            'tiendaId': request.form['tiendaId'],
+            'tiendaId': tienda_id,
             'nombreProducto': request.form['nombreProducto'],
             'descripcion': request.form['descripcion'],
             'precio': request.form['precio'],
@@ -290,6 +334,7 @@ def agregar_producto():
         abort(500)
     
     return jsonify(data), 201
+
 
 @app.route('/editarProducto/<string:producto_id>', methods=['PUT'])
 def editar_producto(producto_id):
