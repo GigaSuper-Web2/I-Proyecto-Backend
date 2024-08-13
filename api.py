@@ -335,7 +335,46 @@ def agregar_producto():
     
     return jsonify(data), 201
 
+## Obtener todos los productos
+@app.route('/obtenerProductos', methods=['GET'])
+def obtener_productos():
+    try:
+        conex = contextDB()
+        productos = list(conex.producto.find({}))
+        if not productos:
+            return jsonify({
+                "status_code": 404,
+                "status_message": "No se encontraron productos"
+            }), 404
 
+        # Preparar la lista de productos para la respuesta
+        productos_data = []
+        for producto in productos:
+            productos_data.append({
+                "id": producto['_id'],
+                "nombreProducto": producto['nombreProducto'],
+                "descripcion": producto['descripcion'],
+                "precio": producto['precio'],
+                "stock": producto['stock'],
+                "logoProducto": producto['logoProducto']
+            })
+
+        data = {
+            "status_code": 200,
+            "status_message": "Ok",
+            "data": {
+                "productos": productos_data
+            }
+        }
+        return jsonify(data), 200
+
+    except Exception as expc:
+        print('Exception:', str(expc))
+        abort(500)
+
+
+
+## Editar un producto especifico
 @app.route('/editarProducto/<string:producto_id>', methods=['PUT'])
 def editar_producto(producto_id):
     try:
@@ -436,6 +475,65 @@ def eliminar_producto(producto_id):
     except Exception as expc:
         print('Exception:', str(expc))
         abort(500)
+
+
+## ACtualizar STOCK del producto
+@app.route('/actualizarStock/<string:producto_id>', methods=['PUT'])
+def actualizar_stock(producto_id):
+    try:
+        # Verificar los datos del cuerpo de la solicitud
+        if not request.json or 'cantidadComprada' not in request.json:
+            return jsonify({
+                "status_code": 400,
+                "status_message": "Bad request, cantidadComprada is required"
+            }), 400
+
+        # Obtener la cantidad comprada
+        cantidad_comprada = request.json['cantidadComprada']
+
+        # Validar que la cantidad sea un número entero positivo
+        if not isinstance(cantidad_comprada, int) or cantidad_comprada <= 0:
+            return jsonify({
+                "status_code": 400,
+                "status_message": "Invalid quantity"
+            }), 400
+
+        conex = contextDB()
+        producto = conex.producto.find_one({"_id": producto_id})
+        if producto is None:
+            return jsonify({
+                "status_code": 404,
+                "status_message": "Producto no encontrado"
+            }), 404
+
+        # Convertir el stock a entero si es necesario
+        stock_actual = int(producto.get('stock', 0))
+
+        # Calcular el nuevo stock
+        nuevo_stock = stock_actual - cantidad_comprada
+
+        if nuevo_stock < 0:
+            return jsonify({
+                "status_code": 400,
+                "status_message": "Stock insuficiente"
+            }), 400
+
+        # Actualizar el stock del producto
+        conex.producto.update_one({'_id': producto_id}, {'$set': {'stock': nuevo_stock}})
+
+        return jsonify({
+            "status_code": 200,
+            "status_message": "Stock actualizado"
+        }), 200
+
+    except Exception as expc:
+        print('Exception:', str(expc))  # Mejorar la depuración
+        return jsonify({
+            "status_code": 500,
+            "status_message": "Internal Server Error",
+            "data": str(expc)  # Incluir el mensaje de error
+        }), 500
+
 
 
 
