@@ -286,8 +286,6 @@ def editar_tienda(tienda_id):
             "data": str(expc)  # Esto enviará el mensaje de error en la respuesta (útil para depuración)
         }), 500
 
-
-
 ###                 Usuarios
 
 @app.route('/registrarUsuario', methods=['POST'])
@@ -463,7 +461,6 @@ def eliminarUsuario(user_id):
 
 
                                                         ##Productos
-
 ## Agregar un producto a una tienda
 @app.route('/agregarProducto', methods=['POST'])
 def agregar_producto():
