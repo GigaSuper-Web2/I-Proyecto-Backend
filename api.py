@@ -186,6 +186,106 @@ def eliminar_empresa():
         print('Exception:', str(expc))
         abort(500)
 
+## obtener datos de la empresa
+@app.route('/obtenerEmpresa', methods=['GET'])
+def obtener_tienda():
+    conex = contextDB()
+    try:
+        tienda = conex.tienda.find_one()
+        if tienda is None:
+            return jsonify({
+                "status_code": 404,
+                "status_message": "Tienda no encontrada"
+            }), 404
+
+        data = {
+            "status_code": 200,
+            "status_message": "Ok",
+            "data": {
+                "tienda": {
+                    "nombreEmpresa": tienda['nombreEmpresa'],
+                    "propietarioEmpresa": tienda['propietarioEmpresa'],
+                    "cedulaEmpresa": tienda['cedulaEmpresa'],
+                    "categoria": tienda['categoria'],
+                    "email": tienda['email'],
+                    "logoTienda": tienda['logoTienda']
+                }
+            }
+        }
+        return jsonify(data), 200
+    except Exception as expc:
+        print('Exception:', str(expc))
+        return jsonify({
+            "status_code": 500,
+            "status_message": "Internal Server Error",
+            "data": str(expc)  # Esto enviará el mensaje de error en la respuesta (útil para depuración)
+        }), 500
+
+
+## Editar la tienda 
+@app.route('/editarTienda/<string:tienda_id>', methods=['PUT'])
+def editar_tienda(tienda_id):
+    try:
+        # Verificar si se proporciona un cuerpo de solicitud de formulario
+        if not request.form and 'logoTienda' not in request.files:
+            return jsonify({
+                "status_code": 400,
+                "status_message": "Bad request, no data provided"
+            }), 400
+
+        conex = contextDB()
+        tienda = conex.tienda.find_one({"_id": tienda_id})
+        if tienda is None:
+            return jsonify({
+                "status_code": 404,
+                "status_message": "Tienda no encontrada"
+            }), 404
+
+        # Datos a actualizar
+        update_data = {}
+        if 'nombreEmpresa' in request.form:
+            update_data['nombreEmpresa'] = request.form['nombreEmpresa']
+        if 'propietarioEmpresa' in request.form:
+            update_data['propietarioEmpresa'] = request.form['propietarioEmpresa']
+        if 'cedulaEmpresa' in request.form:
+            update_data['cedulaEmpresa'] = request.form['cedulaEmpresa']
+        if 'categoria' in request.form:
+            update_data['categoria'] = request.form['categoria']
+        if 'email' in request.form:
+            update_data['email'] = request.form['email']
+        
+        # Si se proporciona un nuevo archivo de logo
+        if 'logoTienda' in request.files:
+            logo = request.files['logoTienda']
+            if logo and logo.filename.endswith('.svg'):
+                logoConte = logo.read().decode('utf-8')
+                update_data['logoTienda'] = logoConte
+            else:
+                return jsonify({
+                    "status_code": 400,
+                    "status_message": "Invalid file type. Only .svg files are allowed."
+                }), 400
+
+        if update_data:
+            conex.tienda.update_one({'_id': tienda_id}, {'$set': update_data})
+            return jsonify({
+                "status_code": 200,
+                "status_message": "Tienda actualizada"
+            }), 200
+        else:
+            return jsonify({
+                "status_code": 400,
+                "status_message": "No se proporcionaron datos para actualizar"
+            }), 400
+
+    except Exception as expc:
+        print('Exception:', str(expc))
+        return jsonify({
+            "status_code": 500,
+            "status_message": "Internal Server Error",
+            "data": str(expc)  # Esto enviará el mensaje de error en la respuesta (útil para depuración)
+        }), 500
+
 
 
 ###                 Usuarios
@@ -269,6 +369,98 @@ def get_user_login(email, passwd):
             "status_message": "Internal Server Error",
             "data": str(expc)  # Esto enviará el mensaje de error en la respuesta (útil para depuración)
         }), 500
+
+
+## Editar informacion de usuario registrado
+@app.route('/editarUsuario/<string:user_id>', methods=['PUT'])
+def editarUsuario(user_id):
+    if not request.json:
+        abort(400)
+
+    # Extraer datos de la solicitud
+    nombre = request.json.get('nombre')
+    apellidos = request.json.get('apellidos')
+    email = request.json.get('email')
+    lugarResidencia = request.json.get('lugarResidencia')
+    passwd = request.json.get('passwd')
+
+    # Verificar que al menos un campo es proporcionado
+    if not any([nombre, apellidos, email, lugarResidencia, passwd]):
+        abort(400)
+
+    # Conectar a la base de datos
+    conex = contextDB()
+
+    # Construir el diccionario de actualización
+    update_fields = {}
+    if nombre:
+        update_fields['nombre'] = nombre
+    if apellidos:
+        update_fields['apellidos'] = apellidos
+    if email:
+        update_fields['email'] = email
+    if lugarResidencia:
+        update_fields['lugarResidencia'] = lugarResidencia
+    if passwd:
+        # Encriptar la nueva contraseña
+        passwd = passwd.encode('utf-8')
+        salt = bcrypt.gensalt()
+        hashed_pass = bcrypt.hashpw(passwd, salt)
+        update_fields['passwd'] = hashed_pass
+
+    try:
+        result = conex.user.update_one({"_id": user_id}, {"$set": update_fields})
+        if result.matched_count == 0:
+            return jsonify({
+                "status_code": 404,
+                "status_message": "Not Found",
+                "data": "User not found"
+            }), 404
+
+        data = {
+            "status_code": 200,
+            "status_message": "User updated successfully"
+        }
+        return jsonify(data), 200
+
+    except Exception as expc:
+        print(f"Error during user update: {expc}")
+        return jsonify({
+            "status_code": 500,
+            "status_message": "Internal Server Error",
+            "data": str(expc)
+        }), 500
+
+
+## Eliminar usuario registrado
+@app.route('/eliminarUsuario/<string:user_id>', methods=['DELETE'])
+def eliminarUsuario(user_id):
+    conex = contextDB()
+
+    try:
+        result = conex.user.delete_one({"_id": user_id})
+        if result.deleted_count == 0:
+            return jsonify({
+                "status_code": 404,
+                "status_message": "Not Found",
+                "data": "User not found"
+            }), 404
+
+        data = {
+            "status_code": 200,
+            "status_message": "User deleted successfully"
+        }
+        return jsonify(data), 200
+
+    except Exception as expc:
+        print(f"Error during user deletion: {expc}")
+        return jsonify({
+            "status_code": 500,
+            "status_message": "Internal Server Error",
+            "data": str(expc)
+        }), 500
+
+
 
                                                         ##Productos
 
