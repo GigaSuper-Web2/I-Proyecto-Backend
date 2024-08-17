@@ -219,7 +219,7 @@ def obtener_tienda():
         return jsonify({
             "status_code": 500,
             "status_message": "Internal Server Error",
-            "data": str(expc)  # Esto enviará el mensaje de error en la respuesta (útil para depuración)
+            "data": str(expc)  
         }), 500
 
 
