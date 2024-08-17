@@ -203,6 +203,7 @@ def obtener_tienda():
             "status_message": "Ok",
             "data": {
                 "tienda": {
+                    "idtienda" : tienda['_id'],
                     "nombreEmpresa": tienda['nombreEmpresa'],
                     "propietarioEmpresa": tienda['propietarioEmpresa'],
                     "cedulaEmpresa": tienda['cedulaEmpresa'],
@@ -367,6 +368,45 @@ def get_user_login(email, passwd):
             "status_message": "Internal Server Error",
             "data": str(expc)  # Esto enviará el mensaje de error en la respuesta (útil para depuración)
         }), 500
+
+#obtener usuario en especifico, o sea, quien lleva la sesion
+@app.route('/obtenerUsuario/<string:user_id>', methods=['GET'])
+def obtenerUsuario(user_id):
+    conex = contextDB()
+
+    try:
+        usuario = conex.user.find_one({"_id": user_id})
+        if usuario is None:
+            return jsonify({
+                "status_code": 404,
+                "status_message": "Not Found",
+                "data": "User not found"
+            }), 404
+
+        # Construir la respuesta con los datos del usuario
+        data = {
+            "status_code": 200,
+            "status_message": "Ok",
+            "data": {
+                "user": {
+                    "nombre": usuario.get('nombre'),
+                    "apellidos": usuario.get('apellidos'),
+                    "email": usuario.get('email'),
+                    "lugarResidencia": usuario.get('lugarResidencia')
+                    # No se devuelve la contraseña por razones de seguridad
+                }
+            }
+        }
+        return jsonify(data), 200
+
+    except Exception as expc:
+        print(f"Error during user retrieval: {expc}")
+        return jsonify({
+            "status_code": 500,
+            "status_message": "Internal Server Error",
+            "data": str(expc)
+        }), 500
+
 
 
 ## Editar informacion de usuario registrado
