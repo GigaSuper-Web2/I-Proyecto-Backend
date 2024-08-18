@@ -225,67 +225,54 @@ def obtener_tienda():
 
 ## Editar la tienda 
 @app.route('/editarTienda/<string:tienda_id>', methods=['PUT'])
-def editar_tienda(tienda_id):
+def edit_shop(tienda_id):
     try:
-        # Verificar si se proporciona un cuerpo de solicitud de formulario
-        if not request.form and 'logoTienda' not in request.files:
-            return jsonify({
-                "status_code": 400,
-                "status_message": "Bad request, no data provided"
-            }), 400
-
+        # Verificar si la tienda existe
         conex = contextDB()
         tienda = conex.tienda.find_one({"_id": tienda_id})
-        if tienda is None:
+
+        if not tienda:
             return jsonify({
                 "status_code": 404,
                 "status_message": "Tienda no encontrada"
             }), 404
 
-        # Datos a actualizar
-        update_data = {}
+        # Verificar los datos del formulario
+        update_fields = {}
         if 'nombreEmpresa' in request.form:
-            update_data['nombreEmpresa'] = request.form['nombreEmpresa']
+            update_fields['nombreEmpresa'] = request.form['nombreEmpresa']
         if 'propietarioEmpresa' in request.form:
-            update_data['propietarioEmpresa'] = request.form['propietarioEmpresa']
-        if 'cedulaEmpresa' in request.form:
-            update_data['cedulaEmpresa'] = request.form['cedulaEmpresa']
-        if 'categoria' in request.form:
-            update_data['categoria'] = request.form['categoria']
+            update_fields['propietarioEmpresa'] = request.form['propietarioEmpresa']
         if 'email' in request.form:
-            update_data['email'] = request.form['email']
-        
-        # Si se proporciona un nuevo archivo de logo
+            update_fields['email'] = request.form['email']
+
         if 'logoTienda' in request.files:
             logo = request.files['logoTienda']
-            if logo and logo.filename.endswith('.svg'):
-                logoConte = logo.read().decode('utf-8')
-                update_data['logoTienda'] = logoConte
-            else:
-                return jsonify({
-                    "status_code": 400,
-                    "status_message": "Invalid file type. Only .svg files are allowed."
-                }), 400
+            logoConte = logo.read().decode('utf-8')
+            update_fields['logoTienda'] = logoConte
 
-        if update_data:
-            conex.tienda.update_one({'_id': tienda_id}, {'$set': update_data})
-            return jsonify({
-                "status_code": 200,
-                "status_message": "Tienda actualizada"
-            }), 200
-        else:
+        if not update_fields:
             return jsonify({
                 "status_code": 400,
-                "status_message": "No se proporcionaron datos para actualizar"
+                "status_message": "No se han proporcionado datos para actualizar"
             }), 400
 
+        # Actualizar la tienda
+        conex.tienda.update_one(
+            {"_id": tienda_id},
+            {"$set": update_fields}
+        )
+
+        data = {
+            "status_code": 200,
+            "status_message": "Tienda actualizada correctamente"
+        }
     except Exception as expc:
         print('Exception:', str(expc))
-        return jsonify({
-            "status_code": 500,
-            "status_message": "Internal Server Error",
-            "data": str(expc)  # Esto enviará el mensaje de error en la respuesta (útil para depuración)
-        }), 500
+        abort(500)
+    
+    return jsonify(data), 200
+
 
 ###                 Usuarios
 
